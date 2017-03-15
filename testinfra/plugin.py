@@ -20,15 +20,19 @@ import sys
 import pytest
 import testinfra
 import testinfra.modules
+import testinfra.utils as utils
 
 
 def _generate_fixtures():
     self = sys.modules[__name__]
     for modname in testinfra.modules.modules:
+        modname = modname.title().replace("_", "")
+
         def get_fixture(name):
             @pytest.fixture()
             def f(TestinfraBackend):
-                return TestinfraBackend.get_module(name)
+                return getattr(TestinfraBackend._host,
+                               utils.un_camel_case(name))
             f.__name__ = str(name)
             f.__doc__ = ('https://testinfra.readthedocs.io/en/latest/'
                          'modules.html#{0}'.format(name.lower()))
@@ -50,9 +54,14 @@ def LocalCommand(TestinfraBackend):
     return testinfra.get_backend("local://").get_module("Command")
 
 
+@pytest.fixture()
+def TestinfraBackend(host):
+    return host.backend
+
+
 @pytest.fixture(scope="module")
-def TestinfraBackend(_testinfra_backend):
-    return _testinfra_backend
+def host(_testinfra_host):
+    return _testinfra_host
 
 
 def pytest_addoption(parser):
@@ -105,14 +114,14 @@ def pytest_addoption(parser):
 
 
 def pytest_generate_tests(metafunc):
-    if "_testinfra_backend" in metafunc.fixturenames:
+    if "_testinfra_host" in metafunc.fixturenames:
         if metafunc.config.option.hosts is not None:
             hosts = metafunc.config.option.hosts.split(",")
         elif hasattr(metafunc.module, "testinfra_hosts"):
             hosts = metafunc.module.testinfra_hosts
         else:
             hosts = [None]
-        params = testinfra.get_backends(
+        params = testinfra.get_hosts(
             hosts,
             connection=metafunc.config.option.connection,
             ssh_config=metafunc.config.option.ssh_config,
@@ -120,9 +129,9 @@ def pytest_generate_tests(metafunc):
             sudo_user=metafunc.config.option.sudo_user,
             ansible_inventory=metafunc.config.option.ansible_inventory,
         )
-        ids = [e.get_pytest_id() for e in params]
+        ids = [e.backend.get_pytest_id() for e in params]
         metafunc.parametrize(
-            "_testinfra_backend", params, ids=ids, scope="module")
+            "_testinfra_host", params, ids=ids, scope="module")
 
 
 def pytest_configure(config):

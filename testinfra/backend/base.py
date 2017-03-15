@@ -19,6 +19,7 @@ import pipes
 import subprocess
 
 import testinfra.modules
+import testinfra.utils
 
 logger = logging.getLogger("testinfra")
 
@@ -87,10 +88,14 @@ class BaseBackend(object):
     def __init__(self, hostname, sudo=False, sudo_user=None, *args, **kwargs):
         self._encoding = None
         self._module_cache = {}
+        self._host = None
         self.hostname = hostname
         self.sudo = sudo
         self.sudo_user = sudo_user
         super(BaseBackend, self).__init__()
+
+    def set_host(self, host):
+        self._host = host
 
     @classmethod
     def get_connection_type(cls):
@@ -247,9 +252,14 @@ class BaseBackend(object):
                 Package = TestinfraBackend.get_module("Package")
 
         """
-        try:
-            module = self._module_cache[name]
-        except KeyError:
-            module = testinfra.modules.get_module_class(name).get_module(self)
-            self._module_cache[name] = module
+        if self._host is not None:
+            module = getattr(self._host, testinfra.utils.un_camel_case(name))
+        else:
+            assert False
+            try:
+                module = self._module_cache[name]
+            except KeyError:
+                module = testinfra.modules.get_module_class(
+                    name).get_module(self)
+        self._module_cache[name] = module
         return module
